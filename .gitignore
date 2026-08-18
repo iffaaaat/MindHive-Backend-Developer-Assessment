@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Local editor / OS files
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Generated Task 4 database
+data/perf.sqlite
+
+# Extracted copy of supplied reference
+data/report_reference.json/
+
+# Generated Task 4 database slices
+starter/perf_slice_*.sqlite
+
+# Generated benchmark output
+starter/baseline_*.json
+starter/one_day.json
+starter/one_tenant_one_day*.json
