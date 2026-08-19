@@ -11,8 +11,7 @@ reason each and name that reason.
 from __future__ import annotations
 
 from fake_erp import FakeErp
-from sync_adapter import LocalStore, pull, push
-
+from sync_adapter import LocalStore, erp_timestamp_to_utc, pull, push
 
 def scenario():
     erp = FakeErp(seed=11, timeout_rate=0.25)
@@ -22,11 +21,16 @@ def scenario():
     pulled = pull(erp, store)
 
     # someone edits three items in our UI
+    local_edit_time = erp_timestamp_to_utc(erp._now())
+
     for eid in ("EXT-0003", "EXT-0011", "EXT-0042"):
         rec = store.records.get(eid)
         if rec:
-            rec.payload = dict(rec.payload, price=999.0)
-            rec.dirty = True
+            store.mark_dirty(
+                eid,
+                dict(rec.payload, price=999.0),
+                updated_at_utc=local_edit_time,
+            )
 
     # meanwhile the ERP moves on: a user edits one of the same items there
     erp.tick(120)
