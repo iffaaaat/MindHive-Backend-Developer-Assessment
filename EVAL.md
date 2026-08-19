@@ -22,7 +22,7 @@ The selected operating point is:
 * **Minimum confidence margin:** `0.10`
 * **No-match confidence floor:** `0.70`
 
-At this operating point on the 420 labelled training lines:
+At this operating point on the 420 training lines:
 
 | Metric         | Result |
 | -------------- | -----: |
