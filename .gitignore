@@ -20,3 +20,6 @@ starter/perf_slice_*.sqlite
 starter/baseline_*.json
 starter/one_day.json
 starter/one_tenant_one_day*.json
+
+# Local working files
+working_files/
