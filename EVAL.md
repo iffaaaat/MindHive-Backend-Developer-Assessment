@@ -1,473 +1,382 @@
-# Evaluation
+# Task 3 — Evaluation
 
 ## 1. Evaluation Objective
 
-The matcher is evaluated as a **selective decision system** rather than as a standard classification problem.
+The matcher is evaluated as a **selective decision system**, not as a standard classification problem.
 
-A wrong automatic match is substantially more expensive than an abstention, so the primary operating objective is:
+A wrong automatic match is substantially more expensive than an abstention, so the primary objective is:
 
-> **Maximise useful automatic-match coverage while keeping automatic-match precision very high.**
+> Maximise useful automatic-match coverage while keeping automatic-match precision very high.
 
-The system therefore has three possible outcomes:
+The system has three internal evaluation outcomes:
 
-* `AUTO` — accept the match automatically.
-* `REVIEW` — a plausible candidate exists, but the evidence is not strong enough for automatic action.
-* `NO_MATCH` — candidate evidence is too weak to recommend a catalogue item.
+- `AUTO` — accept the match automatically;
+- `REVIEW` — a plausible candidate exists, but the evidence is not strong enough for automatic action;
+- `NO_MATCH` — candidate evidence is too weak to recommend a catalogue item.
 
-This distinction is important because raw top-1 accuracy does not capture the business cost of confidently selecting the wrong item.
+`NO_MATCH` corresponds to the required `reject` decision in `predictions.csv`.
 
 The selected operating point is:
 
-* **Minimum confidence:** `0.85`
-* **Minimum confidence margin:** `0.10`
-* **No-match confidence floor:** `0.70`
+| Parameter | Value |
+|---|---:|
+| Minimum confidence | 0.85 |
+| Minimum margin | 0.10 |
+| NO_MATCH floor | 0.70 |
 
-At this operating point on the 420 training lines:
+On the 420 training lines:
 
-| Metric         | Result |
-| -------------- | -----: |
-| AUTO decisions |     99 |
-| AUTO correct   |     97 |
-| AUTO wrong     |      2 |
+| Metric | Result |
+|---|---:|
+| AUTO decisions | 99 |
+| AUTO correct | 97 |
+| AUTO wrong | 2 |
 | AUTO precision | 97.98% |
-| AUTO coverage  | 23.57% |
+| AUTO coverage | 23.57% |
 
-Of the 99 `AUTO` decisions:
+Of the 99 AUTO decisions:
 
-* 76 were resolved through strong identifier evidence.
-* 23 were accepted through lexical/structured matching.
+- 76 came from strong identifier evidence;
+- 23 came from lexical/structured matching.
 
-The operating point is intentionally conservative. Reducing the confidence margin increases coverage substantially, but also increases false automatic matches. Since a wrong automatic match is much more costly than sending a line to human review, the higher-margin operating point was retained.
+A stricter `0.925 / 0.10` point achieved 100% measured AUTO precision at 18.10% coverage and slightly better literal cost under the supplied labels.
+
+I retained `0.85 / 0.10` because the two additional apparent AUTO errors are both blank-ground-truth rows that manual inspection identified as likely label ambiguities. In production, I would adjudicate those cases before treating either threshold as permanently optimal.
 
 ## 2. Reproducible Evaluation
 
-The main evaluation commands are:
+Run the complete evaluation from the repository root:
 
 ```bash
-python evaluate_decisions.py
-python -m evaluation.noise_analysis
-python test_baseline.py
-python test_normalizer.py
-python test_matcher_variants.py
-python benchmark_matcher.py
+python3 run_evaluation.py
 ```
 
-These commands evaluate different parts of the system:
+This executes the main matcher evaluation followed by the per-noise-class analysis.
 
-| Script                      | Purpose                                                                          |
-| --------------------------- | -------------------------------------------------------------------------------- |
-| `evaluate_decisions.py`     | Measures AUTO precision and coverage across confidence and margin thresholds.    |
-| `evaluation.noise_analysis` | Measures retrieval and decision behaviour across manually defined noise classes. |
-| `test_baseline.py`          | Validates strong barcode and customer-alias resolution.                          |
-| `test_normalizer.py`        | Protects normalization behaviour with regression assertions.                     |
-| `test_matcher_variants.py`  | Protects specific variant reranking behaviour.                                   |
-| `benchmark_matcher.py`      | Measures warm-cache per-line latency.                                            |
+Additional diagnostic analysis:
 
-### Latency
+```bash
+python3 evaluate_three_way.py
+python3 evaluate_decisions.py
+```
 
-The matcher latency benchmark measured **4,200 decisions**:
+Regression checks:
 
-| Metric  |   Latency |
-| ------- | --------: |
-| Average |  5.936 ms |
-| P50     |  6.636 ms |
-| P95     |  9.335 ms |
-| P99     | 10.625 ms |
-| Maximum | 24.864 ms |
+```bash
+python3 test_baseline.py
+python3 test_normalizer.py
+python3 test_matcher_variants.py
+```
 
-The measured P95 latency of **9.335 ms** is comfortably below the required **250 ms per-line budget**.
+Latency benchmark:
 
-## 3. Precision Versus Coverage
+```bash
+python3 benchmark_matcher.py
+```
 
-The following sweep uses the same labelled training set while varying the minimum confidence and confidence-margin requirements.
+### Final Aggregate Results
+
+Dataset:
+
+| Metric | Result |
+|---|---:|
+| Total rows | 420 |
+| Positive GT | 295 |
+| Blank GT | 125 |
+
+Retrieval:
+
+| Metric | Result |
+|---|---:|
+| Top-1 accuracy | 263 / 295 = 89.15% |
+| Top-5 recall | 292 / 295 = 98.98% |
+
+Strong identifiers:
+
+| Metric | Result |
+|---|---:|
+| Resolved | 76 |
+| Correct | 76 |
+| Precision | 100% |
+
+Three-way decisions:
+
+| Decision | Count |
+|---|---:|
+| AUTO | 99 |
+| REVIEW | 261 |
+| NO_MATCH | 60 |
+
+AUTO quality:
+
+| Metric | Result |
+|---|---:|
+| Correct | 97 |
+| Wrong | 2 |
+| Precision | 97.98% |
+| Coverage | 23.57% |
+
+REVIEW composition:
+
+| Type | Count |
+|---|---:|
+| Positive GT | 195 |
+| Blank GT | 66 |
+
+NO_MATCH quality:
+
+| Metric | Result |
+|---|---:|
+| Correct blank GT | 57 |
+| Wrong positive GT | 3 |
+| Precision | 95.00% |
+| Blank-GT recall | 45.60% |
+
+## 3. Per-Tenant Results
+
+### ACME
+
+| Metric | Result |
+|---|---:|
+| Rows | 260 |
+| Positive GT | 174 |
+| Blank GT | 86 |
+| AUTO | 57 |
+| AUTO correct | 55 |
+| AUTO wrong | 2 |
+| AUTO precision | 96.49% |
+| AUTO coverage | 21.92% |
+| REVIEW | 164 |
+| NO_MATCH | 39 |
+
+### Nordic
+
+| Metric | Result |
+|---|---:|
+| Rows | 160 |
+| Positive GT | 121 |
+| Blank GT | 39 |
+| AUTO | 42 |
+| AUTO correct | 42 |
+| AUTO wrong | 0 |
+| AUTO precision | 100% |
+| AUTO coverage | 26.25% |
+| REVIEW | 97 |
+| NO_MATCH | 21 |
+
+No cross-tenant violations were observed.
+
+## 4. Precision Versus Coverage
+
+Accuracy alone is misleading because the business cost of a wrong automatic match is much higher than the cost of review.
+
+The following sweep varies the confidence and margin thresholds:
 
 | Min confidence | Min margin | AUTO | Correct | Wrong | Precision | Coverage |
-| -------------: | ---------: | ---: | ------: | ----: | --------: | -------: |
-|           0.85 |       0.00 |  268 |     221 |    47 |    82.46% |   63.81% |
-|           0.85 |       0.01 |  242 |     221 |    21 |    91.32% |   57.62% |
-|           0.85 |       0.03 |  224 |     213 |    11 |    95.09% |   53.33% |
-|           0.85 |       0.05 |  211 |     201 |    10 |    95.26% |   50.24% |
-|           0.85 |       0.10 |   99 |      97 |     2 |    97.98% |   23.57% |
-|           0.90 |       0.00 |  222 |     175 |    47 |    78.83% |   52.86% |
-|           0.90 |       0.03 |  182 |     171 |    11 |    93.96% |   43.33% |
-|           0.90 |       0.05 |  171 |     161 |    10 |    94.15% |   40.71% |
-|           0.90 |       0.10 |   87 |      85 |     2 |    97.70% |   20.71% |
-|          0.925 |       0.10 |   76 |      76 |     0 |   100.00% |   18.10% |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0.85 | 0.00 | 268 | 221 | 47 | 82.46% | 63.81% |
+| 0.85 | 0.01 | 242 | 221 | 21 | 91.32% | 57.62% |
+| 0.85 | 0.03 | 224 | 213 | 11 | 95.09% | 53.33% |
+| 0.85 | 0.05 | 211 | 201 | 10 | 95.26% | 50.24% |
+| 0.85 | 0.10 | 99 | 97 | 2 | 97.98% | 23.57% |
+| 0.90 | 0.00 | 222 | 175 | 47 | 78.83% | 52.86% |
+| 0.90 | 0.03 | 182 | 171 | 11 | 93.96% | 43.33% |
+| 0.90 | 0.05 | 171 | 161 | 10 | 94.15% | 40.71% |
+| 0.90 | 0.10 | 87 | 85 | 2 | 97.70% | 20.71% |
+| 0.925 | 0.10 | 76 | 76 | 0 | 100.00% | 18.10% |
 
-The results show why accuracy or coverage alone would be misleading.
+Removing the margin requirement increases AUTO coverage from 23.57% to 63.81%, but AUTO precision falls from 97.98% to 82.46%.
 
-For example, removing the margin requirement increases AUTO coverage from **23.57% to 63.81%**, but AUTO precision falls from **97.98% to 82.46%**. The additional coverage therefore comes from automatically accepting more ambiguous candidates.
+This shows why I do not automatically accept the top-ranked candidate even when its score is high. Candidate separation matters.
 
-At the opposite extreme, requiring confidence `>= 0.925` produces **100% AUTO precision**, but reduces the system to only the 76 strongest identifier-based matches.
+The `0.925 / 0.10` point is a legitimate safer alternative. Under a literal application of the supplied labels it has slightly better measured cost, but the difference is driven by the two disputed blank-GT rows discussed below.
 
-The selected `0.85 / 0.10` operating point therefore allows some lexical AUTO matching while maintaining a substantially safer precision level.
+## 5. Noise-Class Analysis
 
-## 4. Noise-Class Analysis
+I defined noise classes from patterns observed in the supplied order lines.
 
-The training data was segmented into manually defined noise classes based on patterns observed in the order lines.
+| Noise class | Rows | Positive GT | Blank GT | Top-1 accuracy | Top-5 recall | AUTO precision | AUTO coverage |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| numeric_attributes | 357 | 266 | 91 | 92.86% | 99.25% | 97.37% | 21.29% |
+| measurement_text | 269 | 203 | 66 | 93.60% | 99.51% | 96.83% | 23.42% |
+| has_uom | 215 | 147 | 68 | 90.48% | 98.64% | 95.56% | 20.93% |
+| has_price | 184 | 167 | 17 | 94.01% | 99.40% | 98.15% | 29.35% |
+| conversational_noise | 68 | 57 | 11 | 91.23% | 96.49% | 100.00% | 22.06% |
+| has_buyer_sku | 64 | 64 | 0 | 59.38% | 95.31% | 100.00% | 100.00% |
+| short_text | 51 | 24 | 27 | 41.67% | 95.83% | 100.00% | 47.06% |
+| separator_noise | 48 | 40 | 8 | 100.00% | 100.00% | 85.71% | 29.17% |
+| spacing_noise | 20 | 19 | 1 | 89.47% | 94.74% | 100.00% | 15.00% |
+| has_barcode | 13 | 13 | 0 | 61.54% | 100.00% | 100.00% | 92.31% |
+| plain_text | 7 | 1 | 6 | 100.00% | 100.00% | 0.00% | 0.00% |
 
-The purpose of this breakdown is to distinguish failures caused by different input conditions rather than relying on a single aggregate score.
+Several patterns matter.
 
-| Noise class          | Rows | Positive GT | Blank GT | Top-1 accuracy | Top-5 recall | AUTO precision | AUTO coverage |
-| -------------------- | ---: | ----------: | -------: | -------------: | -----------: | -------------: | ------------: |
-| numeric_attributes   |  357 |         266 |       91 |         92.86% |       99.25% |         97.37% |        21.29% |
-| measurement_text     |  269 |         203 |       66 |         93.60% |       99.51% |         96.83% |        23.42% |
-| has_uom              |  215 |         147 |       68 |         90.48% |       98.64% |         95.56% |        20.93% |
-| has_price            |  184 |         167 |       17 |         94.01% |       99.40% |         98.15% |        29.35% |
-| conversational_noise |   68 |          57 |       11 |         91.23% |       96.49% |        100.00% |        22.06% |
-| has_buyer_sku        |   64 |          64 |        0 |         59.38% |       95.31% |        100.00% |       100.00% |
-| short_text           |   51 |          24 |       27 |         41.67% |       95.83% |        100.00% |        47.06% |
-| separator_noise      |   48 |          40 |        8 |        100.00% |      100.00% |         85.71% |        29.17% |
-| spacing_noise        |   20 |          19 |        1 |         89.47% |       94.74% |        100.00% |        15.00% |
-| has_barcode          |   13 |          13 |        0 |         61.54% |      100.00% |        100.00% |        92.31% |
-| plain_text           |    7 |           1 |        6 |        100.00% |      100.00% |          0.00% |         0.00% |
+First, top-5 recall remains high even where top-1 accuracy is weaker. Candidate generation is therefore usually successful; many remaining failures are ranking or ambiguity problems.
 
-Several patterns are important.
+Second, buyer-SKU and barcode rows have weaker lexical top-1 accuracy but very strong AUTO precision because validated identifiers are evaluated before the lexical lane.
 
-First, top-5 recall remains high across most categories even when top-1 accuracy is weaker. This indicates that candidate generation is usually successful and that many remaining failures are ranking or ambiguity problems rather than retrieval failures.
+Third, short-text rows illustrate why raw top-1 accuracy is misleading. Their lexical top-1 accuracy is only 41.67%, but AUTO precision is 100%. When the description does not contain enough information, the system abstains rather than forcing a lexical answer.
 
-Second, rows containing buyer SKU or barcode identifiers have relatively weak lexical top-1 accuracy but very strong AUTO precision. This is expected because the final matcher evaluates validated identifiers before lexical retrieval.
+## 6. Manual Error Analysis
 
-For example:
+I manually inspected specific failures and grouped them into:
 
-* Buyer-SKU rows achieve **100% AUTO precision** and **100% AUTO coverage**.
-* Barcode rows achieve **100% AUTO precision** and **92.31% AUTO coverage**.
-
-This supports the identifier-first pipeline design.
-
-Short-text rows also illustrate why raw top-1 accuracy is misleading. Their lexical top-1 accuracy is only **41.67%**, but AUTO precision is **100%**. Many short descriptions do not contain enough attributes to uniquely identify a catalogue item, so the system either relies on stronger identifiers or abstains rather than forcing a lexical prediction.
-
-The separator-noise group has lower AUTO precision at **85.71%**. Manual inspection showed that the two apparent AUTO errors are blank-ground-truth rows with highly plausible exact catalogue matches. These are treated as label or task-ambiguity cases rather than evidence that separator normalization should be weakened.
-
-## 5. Manual error analysis
-
-I manually inspected specific failures rather than treating every disagreement
-with the ground truth as the same type of error.
-
-I grouped the cases into four categories:
-
-1. genuine matcher or normalization defects;
-2. under-specified text that is correctly recovered by stronger identifiers;
-3. intrinsic catalogue/ground-truth ambiguity;
+1. genuine matcher defects;
+2. under-specified text recovered by stronger identifiers;
+3. intrinsic catalogue or input ambiguity;
 4. likely label problems.
 
-The cost class refers to the likely production consequence:
+The cost class represents the likely production consequence:
 
-- **High** — could cause an incorrect automatic SKU selection.
-- **Medium** — primarily causes unnecessary human review.
+- **High** — could cause an incorrect automatic SKU selection;
+- **Medium** — primarily causes unnecessary human review;
 - **Data** — the available input or label does not define a unique software fix.
 
-### 5.1 Genuine matcher defects found and fixed
+### 6.1 Genuine Matcher Defects Found and Fixed
 
 | line_id | Failure | Root cause | Cost | Fix |
 |---|---|---|---|---|
-| ACM-T-0071 | `tolsen GRINDING DISC 4.5" flap` initially ranked a Grinding disc above the GT Flap disc | Lexical token-set similarity treated `grinding` and `flap` as ordinary competing tokens and did not recognise the more specific product variant | High | Added explicit variant extraction and used variant agreement as a ranking-only signal |
-| ACM-T-0166 | `BOSCO GRINDING DISC 5" FLAP` initially preferred the Grinding variant | Same variant-ranking problem as ACM-T-0071 | High | Covered by the same variant reranking rule and regression test |
-| ACM-T-0179 | `Remax Ball Valve " 1PVC` failed to interpret the intended 1-inch dimension correctly | Malformed inch marker appeared before the number rather than after it | High | Added normalization for misplaced inch markers, producing `1in pvc` |
-| ACM-T-0249 | Malay colour term `putih` did not match catalogue colour `White` | Missing multilingual normalization for an unambiguous colour synonym | Medium | Added `putih -> white` normalization |
+| ACM-T-0071 | `tolsen GRINDING DISC 4.5" flap` initially ranked a generic grinding disc above the GT flap disc | Lexical similarity did not recognise the more specific variant | High | Added variant extraction and reranking |
+| ACM-T-0166 | `BOSCO GRINDING DISC 5" FLAP` initially preferred the grinding variant | Same variant-ranking capability gap | High | Covered by the same variant rule and regression test |
+| ACM-T-0179 | `Remax Ball Valve " 1PVC` failed to interpret the intended dimension | Inch marker appears before the number | High | Added misplaced-inch normalisation to produce `1in pvc` |
+| ACM-T-0249 | `putih` did not match catalogue colour `White` | Missing narrow multilingual normalisation | Medium | Added `putih -> white` |
 
-These four failures represented reusable capabilities rather than one-off
-ground-truth patches. Regression tests were added for the normalization and
-variant-ranking behaviour.
+These fixes are reusable capabilities rather than row-specific ground-truth patches.
 
-### 5.2 Under-specified lexical text recovered by identifiers
+### 6.2 Under-Specified Text Recovered by Identifiers
 
-The following cases are lexical top-1 disagreements, but the input text does
-not contain enough information to select the exact SKU reliably. A valid
-customer SKU alias or barcode resolves the correct item before the lexical lane
-is allowed to make the final decision.
-
-| line_id | Input symptom | Missing distinguishing information | Identifier evidence | Cost | Production treatment |
+| line_id | Input symptom | Missing information | Identifier evidence | Cost | Production treatment |
 |---|---|---|---|---|---|
-| ACM-T-0010 | `Vermont GI Wire Soft` | Wire gauge | buyer SKU alias | Medium | Use alias; otherwise review |
-| ACM-T-0011 | `need Kanto Grinder Disc Grinding` | Disc size | buyer SKU alias | Medium | Use alias; otherwise review |
-| ACM-T-0035 | `Stallion Hose Clip Zinc` | Diameter/range | buyer SKU alias | Medium | Use alias; otherwise review |
-| ACM-T-0037 | `Vermont - Valve` | Size and material | buyer SKU alias | High | Use alias; never invent attributes |
+| ACM-T-0010 | `Vermont GI Wire Soft` | Wire gauge | buyer SKU | Medium | Use alias; otherwise review |
+| ACM-T-0011 | `need Kanto Grinder Disc Grinding` | Disc size | buyer SKU | Medium | Use alias; otherwise review |
+| ACM-T-0035 | `Stallion Hose Clip Zinc` | Diameter/range | buyer SKU | Medium | Use alias; otherwise review |
+| ACM-T-0037 | `Vermont - Valve` | Size and material | buyer SKU | High | Use alias; never invent attributes |
 | ACM-T-0091 | `Vermont PVC 32mm Class` | Class letter | barcode | High | Barcode resolves exact SKU |
-| ACM-T-0103 | `M6x50 304` | Brand | buyer SKU alias | Medium | Use alias; otherwise review |
-| ACM-T-0105 | `GI Wire #18 Hard` | Brand | buyer SKU alias | Medium | Use alias; otherwise review |
+| ACM-T-0103 | `M6x50 304` | Brand | buyer SKU | Medium | Use alias; otherwise review |
+| ACM-T-0105 | `GI Wire #18 Hard` | Brand | buyer SKU | Medium | Use alias; otherwise review |
 | ACM-T-0118 | `Plug 12mm Blue` | Brand | barcode | Medium | Barcode resolves exact SKU |
-| ACM-T-0132 | `GI Wire` | Brand, gauge and grade | buyer SKU alias | High | Use alias; lexical AUTO would be unsafe |
-| ACM-T-0133 | `urgent Pipe 40mm Class D` | Brand | buyer SKU alias | Medium | Use alias; otherwise review |
+| ACM-T-0132 | `GI Wire` | Brand, gauge and grade | buyer SKU | High | Use alias; lexical AUTO would be unsafe |
+| ACM-T-0133 | `urgent Pipe 40mm Class D` | Brand | buyer SKU | Medium | Use alias; otherwise review |
 | ACM-T-0186 | `PVC 20mm Class E` | Brand | barcode | Medium | Barcode resolves exact SKU |
-| ACM-T-0255 | `urgent Self Drilling Screw #10 x` | Brand, length and finish | buyer SKU alias | High | Use alias; otherwise review |
+| ACM-T-0255 | `urgent Self Drilling Screw #10 x` | Brand, length and finish | buyer SKU | High | Use alias; otherwise review |
 
-These rows should not be "fixed" by introducing defaults such as a preferred
-brand, colour, size, or class. Those rules would make training accuracy look
-better while creating unjustified behaviour on unseen data.
+These cases should not be “fixed” by inventing defaults such as a preferred brand, size, colour, or class.
 
-### 5.3 Intrinsic ambiguity / insufficient context
+### 6.3 Intrinsic Ambiguity
 
-| line_id | Failure | Root cause | Cost | Production treatment |
+| line_id | Problem | Root cause | Cost | Production treatment |
 |---|---|---|---|---|
-| ACM-T-0209 | `Masking Tape 24mm High Temp` does not identify the labelled Bulk/Tolsen SKU | The source omits both the brand and any Bulk marker; several catalogue items satisfy the visible description | Data | Keep multiple candidates and send to review |
-| NRD-T-0009 | `Golden Pantry Full Cream Milk UHT 200ml` has both base and Bulk catalogue twins | Both active items have effectively identical visible evidence, and the barcode is shared/ambiguous | Data | Do not force either twin; review unless stronger context exists |
+| ACM-T-0209 | `Masking Tape 24mm High Temp` does not identify the labelled Bulk/Tolsen SKU | Brand and Bulk information are missing | Data | Keep multiple candidates and review |
+| NRD-T-0009 | `Golden Pantry Full Cream Milk UHT 200ml` has base and Bulk catalogue twins | Visible evidence and barcode do not safely distinguish them | Data | Review unless stronger context exists |
 
-I tested whether absence of the word `Bulk` could safely imply the base item.
-The training data contains examples in both directions, so a blanket
-`no Bulk token -> prefer base` rule was rejected.
+I tested whether absence of the word `Bulk` could safely imply the base item. The training data contains examples in both directions, so I rejected that heuristic.
 
-### 5.4 Likely label / task ambiguity
+### 6.4 Likely Label or Task Ambiguity
 
-Two blank-ground-truth rows produced highly plausible exact catalogue matches:
-
-| line_id | Observed behaviour | Why the label is questionable | Production treatment |
+| line_id | Issue | Why questionable | Production treatment |
 |---|---|---|---|
-| ACM-T-0177 | Exact textual match to a Vermont Self Drilling Screw variant, but GT is blank | The visible product evidence is strong; the main apparent mismatch is order UOM versus catalogue packet UOM | Treat as label-suspect; do not introduce a hard UOM rejection |
-| ACM-T-0212 | Exact textual match to a Stallion Self Drilling Screw variant, but GT is blank | Same pattern: exact product description with an ea/unit versus Packet UOM difference | Treat as label-suspect; require data review rather than matcher weakening |
+| ACM-T-0177 | Exact visible product match but GT is blank | Main discrepancy is unit-like order UOM versus catalogue `Packet` UOM | Flag for data review; do not introduce a hard UOM rejection |
+| ACM-T-0212 | Same pattern: exact visible match but GT is blank | Positive labelled rows show unit-to-packet mappings can be valid | Flag for data review |
+| ACM-T-0209 | Label chooses a specific Bulk/Tolsen item | Input does not contain enough information to justify that unique choice | Review unless stronger context exists |
+| NRD-T-0009 | GT chooses the base item | Base and Bulk twins are indistinguishable from the supplied evidence | Review or improve catalogue contract |
 
-A hard UOM mismatch rule was considered and rejected because the labelled data
-contains positive examples where `ea` or `unit` legitimately maps to an item
-whose stock UOM is `Packet`.
+These examples identify questionable or under-specified labels rather than blindly optimising against them.
 
-### 5.5 Summary of the failure investigation
+In production, I would keep disputed labels separate until an operator or catalogue owner adjudicates them.
 
-The investigation changed how I interpreted the raw lexical error count.
+## 7. When I Stopped Tuning
 
-After the targeted fixes, there were 32 remaining positive-ground-truth
-lexical top-1 disagreements.
+After the targeted fixes, there were 32 remaining positive-GT lexical top-1 disagreements.
 
 Of those:
 
 - 30 were correctly resolved by the identifier lane;
 - 0 identifier resolutions were incorrect;
 - 0 barcode/alias conflicts occurred;
-- only 2 had no unique identifier resolution, and both were intrinsically
-  ambiguous or under-specified.
+- only 2 had no unique identifier resolution, and both were intrinsically ambiguous or under-specified.
 
-Therefore I stopped adding lexical heuristics at that point. Further tuning
-against these cases would mainly teach arbitrary catalogue preferences rather
-than improve generalisation.
+At that point I stopped adding lexical heuristics.
 
-## 6. Label and task ambiguity
+Further tuning would mainly teach arbitrary catalogue preferences rather than improve generalisation.
 
-The provided labels are useful for evaluation, but they are not perfect.
-I found several rows where the ground truth appears questionable or where the
-source text does not contain enough information to justify one unique answer.
+## 8. Regression Safety
 
-This matters because blindly optimising against those labels would encourage
-the matcher to learn arbitrary catalogue preferences.
+The evaluation harness should prevent unsafe matcher changes from shipping.
 
-### 6.1 ACM-T-0177 — likely incorrect blank label
+### Hard Correctness Gates
 
-The line describes:
-
-`Vermont Self Drilling Screw #10 x 1-1/2" Stainless 410`
-
-The catalogue contains an exact matching item, but the labelled
-`gt_item_code` is blank.
-
-The main visible difference is that the order line uses a unit-like UOM while
-the catalogue item is stocked as `Packet`.
-
-I considered treating UOM mismatch as a hard rejection rule, but rejected that
-idea because the labelled data contains multiple positive examples where
-`ea` or `unit` legitimately maps to a catalogue item stocked as `Packet`.
-
-Therefore I treat this row as label-suspect rather than evidence that the
-matcher should reject exact product matches whenever the UOM differs.
-
-In production I would send this case to data-quality review and record the
-operator-confirmed outcome before changing matching policy.
-
-### 6.2 ACM-T-0212 — same likely label problem
-
-This row has the same pattern:
-
-`Stallion Self Drilling Screw #8 x 3/4" Stainless 410`
-
-The catalogue contains an exact visible product match, while the ground truth
-is blank.
-
-Again, the apparent discrepancy is mostly the input UOM versus catalogue
-stock UOM.
-
-Because positive labelled rows show that unit-to-packet mappings can be valid,
-I do not treat this as a safe software rejection rule.
-
-This strengthens the conclusion that at least some blank ground-truth rows
-represent annotation ambiguity rather than true no-match cases.
-
-### 6.3 ACM-T-0209 — under-specified ground truth
-
-The source text is:
-
-`pls send Masking Tape 24mm High Temp`
-
-The labelled item is a specific Bulk/Tolsen variant, but the source text
-contains neither the brand nor a Bulk marker.
-
-Several active catalogue items satisfy the visible description.
-
-I tested whether the absence of the word `Bulk` could safely imply the base
-item, but the training data contains examples where a Bulk item is the labelled
-answer even when the source does not explicitly say `Bulk`.
-
-Therefore there is no evidence for a deterministic rule that uniquely selects
-the labelled item.
-
-In production this line should remain in review unless additional context is
-available, such as customer-specific history, a buyer SKU, barcode, or a
-confirmed previous order.
-
-### 6.4 NRD-T-0009 — ambiguous catalogue twins
-
-The source text is:
-
-`Golden Pantry Full Cream Milk UHT 200ml`
-
-The catalogue contains both a base item and a `(Bulk)` twin with effectively
-identical visible matching evidence.
-
-The barcode is also not uniquely useful because it maps ambiguously across the
-active twins.
-
-The ground truth chooses the base item, but the supplied line does not contain
-evidence that safely distinguishes base from Bulk.
-
-I therefore classify this row as under-specified rather than a matcher defect.
-
-In production I would either:
-
-- require stronger order context;
-- use validated customer-specific purchase history;
-- expose both candidates to review; or
-- fix the catalogue/identifier contract so active twins are distinguishable.
-
-### 6.5 Production treatment of questionable labels
-
-Questionable labels should not be silently overwritten or used as direct
-training truth.
-
-I would maintain a small adjudication workflow:
-
-1. flag rows where strong evidence contradicts the label;
-2. record the evidence and matcher version;
-3. have an operator or catalogue owner confirm the correct outcome;
-4. update the labelled evaluation set only after adjudication;
-5. keep disputed rows separate from ordinary regression metrics until resolved.
-
-This prevents label noise from turning into matcher rules and then feeding back
-into future alias history.
-
-## 7. Regression safety and release gates
-
-The evaluation harness should not only describe matcher quality; it should stop
-unsafe changes from being released.
-
-I would treat the current labelled training set as a regression benchmark and
-apply explicit release gates to every matcher change.
-
-### 7.1 Hard correctness gates
-
-The following conditions should fail the build immediately:
+Fail immediately on:
 
 - any cross-tenant prediction;
-- any strong identifier regression where barcode or validated alias resolution
-  becomes incorrect;
-- any duplicate or invalid output rows in `predictions.csv`;
-- any confidence value outside `[0,1]`;
-- any regression test failure in normalization or variant handling;
-- matcher p95 latency above the required 250 ms per line.
+- any incorrect strong-identifier resolution;
+- duplicate or invalid rows in `predictions.csv`;
+- confidence outside `[0,1]`;
+- normalisation or variant regression-test failure;
+- p95 matcher latency above 250 ms.
 
-Cross-tenant violations are especially important because tenant isolation is a
-hard correctness boundary rather than a ranking preference.
-
-### 7.2 AUTO precision gate
-
-The primary quality gate should be AUTO precision at the selected operating
-point.
+### AUTO Precision Gate
 
 Current reference:
 
-- minimum confidence: `0.85`
-- minimum confidence margin: `0.10`
-- AUTO precision: `97.98%`
-- AUTO coverage: `23.57%`
+- minimum confidence: `0.85`;
+- minimum margin: `0.10`;
+- AUTO precision: `97.98%`;
+- AUTO coverage: `23.57%`.
 
-A matcher change should not be accepted if it materially reduces AUTO
-precision unless the business explicitly approves a new cost trade-off.
-
-A practical CI gate would require:
+A practical release gate would require:
 
 - AUTO precision >= 97%;
 - zero new incorrect strong-identifier resolutions.
 
-Coverage may move in either direction, but an increase in coverage should be
-accepted only if precision remains above the safety threshold.
+Coverage may increase only if the precision floor remains satisfied.
 
-### 7.3 Retrieval regression gate
+### Retrieval Gate
 
-Candidate generation should also be monitored independently of AUTO decisions.
+Candidate generation should also be monitored separately.
 
-The current broad retrieval behaviour is strong, with very high top-k recall
-across the main noise classes.
+I would fail or investigate a change if:
 
-A useful regression gate is:
+- positive-GT top-5 recall materially decreases;
+- a GT item previously present in the top 20 disappears entirely.
 
-- positive-GT top-5 recall must not materially decrease;
-- any GT item that was previously present in the top 20 but disappears should
-  be investigated.
+### Benchmark Maintenance
 
-This separates retrieval regressions from confidence-calibration regressions.
+To avoid benchmark rot:
 
-### 7.4 Targeted regression tests
+1. version evaluation data and matcher configuration together;
+2. keep historical metrics per release;
+3. add adjudicated production failures to the regression set;
+4. monitor by tenant and noise class;
+5. keep disputed labels separate until resolved.
 
-Specific bugs found during manual error analysis are protected with dedicated
-tests.
+## 9. Latency
 
-Current examples include:
+Latest verification run:
 
-- normal inch and fractional-inch normalization;
-- `SS304 -> stainless 304`;
-- `ZP -> zinc plated`;
-- `putih -> white`;
-- malformed `" 1PVC -> 1in pvc`;
-- Flap variants ranking above generic Grinding variants when the source
-  explicitly contains `flap`.
+| Metric | Latency |
+|---|---:|
+| Average | 5.923 ms |
+| P50 | 6.741 ms |
+| P95 | 9.344 ms |
+| P99 | 10.392 ms |
+| Maximum | 17.629 ms |
 
-These tests protect reusable behaviours rather than individual ground-truth
-rows.
+The measured p95 remains comfortably below the required 250 ms per-line budget.
 
-### 7.5 Preventing benchmark rot
+## 10. Conclusion
 
-A fixed benchmark can become misleading if the production distribution changes.
+The main result is not a single accuracy number.
 
-To reduce that risk I would:
+The matcher deliberately separates:
 
-1. version the evaluation dataset and matcher configuration together;
-2. keep historical metrics for each release;
-3. add newly adjudicated production failures to the regression set;
-4. monitor performance by tenant and noise class rather than aggregate only;
-5. periodically review whether the benchmark still reflects current order
-   formats and catalogue behaviour;
-6. keep disputed or label-suspect rows separately tracked until adjudicated.
+- candidate retrieval;
+- strong identifier evidence;
+- structured ranking;
+- confidence calibration;
+- automation versus abstention.
 
-The benchmark should therefore evolve through reviewed production evidence,
-not through silently changing labels to make the current matcher look better.
+At the selected operating point it achieves **97.98% AUTO precision at 23.57% AUTO coverage**, while positive-GT top-5 recall remains **98.98%**.
 
-## 8. Evaluation conclusion
+Manual error analysis showed that many remaining lexical disagreements are under-specified descriptions, catalogue ambiguities, or questionable labels rather than reusable matcher defects.
 
-The main result of the evaluation is not a single accuracy number.
-
-The matcher deliberately trades coverage for high-confidence automation:
-
-- strong identifiers provide a high-precision first lane;
-- lexical retrieval maintains high candidate recall;
-- structured evidence improves ranking;
-- confidence and candidate separation decide whether automation is safe;
-- ambiguous cases remain in REVIEW rather than being forced to a catalogue
-  item.
-
-At the selected operating point the matcher achieves 97.98% AUTO precision at
-23.57% AUTO coverage on the labelled set, while maintaining a measured p95
-latency of 9.335 ms per line.
-
-Manual error analysis also showed that many apparent lexical failures are
-under-specified descriptions that are correctly recovered by identifiers, and
-that several remaining disagreements are label or catalogue ambiguities rather
-than useful targets for additional heuristics.
-
-For that reason I stopped tuning the matcher once additional rules no longer
-had clear evidence that they would generalise beyond the labelled training
-set.
+For that reason, I stopped tuning when additional rules no longer had clear evidence that they would generalise.

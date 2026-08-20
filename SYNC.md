@@ -2,6 +2,8 @@
 
 ## 1. Defects Found
 
+Each regression test below was written to isolate the stated defect: it reproduces the failure on the original adapter and passes after the corresponding fix.
+
 ### MAIA-812 — Records skipped at page boundaries
 
 **Cause:** `pull()` used a timestamp-only cursor while the ERP returns only records where `updated_at > since`. Because timestamps have second-level resolution, a page could end in the middle of several records sharing the same timestamp. In the supplied scenario, `EXT-0049` and `EXT-0050` both had `2026-08-01 00:00:58`; after the first page ended on `EXT-0049`, the next request skipped `EXT-0050`.
